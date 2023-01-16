@@ -56,8 +56,58 @@ const moviesController = {
             });
     },
     //Aqui debo modificar para crear la funcionalidad requerida
-    'buscar': (req, res) => {
-        
+    'buscar': async (req, res) => {
+        const { titulo } = req.query;
+        const urlBase = "https://www.omdbapi.com/"
+        const apiKey = process.env.OMDB_API_KEY
+
+        try {
+
+            let movie = await db.Movie.findOne({
+                where: {
+                    title: {
+                        [Op.substring]: titulo
+                    }
+                }
+            })
+
+            if (!movie) {
+                let response = await fetch(`${urlBase}?apiKey=${apiKey}&t=${titulo}`);
+                movie = await response.json();
+
+                const { Title, Released, imdbRating, Awards, Runtime, Poster } = movie
+
+                if (movie && movie.Error === 'Movie not found!') {
+                    return res.send("No hay pelicula con ese nombre")
+                } else {
+                    await db.Movie.create({
+                        title: Title,
+                        rating: +imdbRating,
+                        awards: Awards.split(" ").filter(char => !isNaN(char)).reduce((acum, num) => +acum + +num),
+                        image: Poster,
+                        release_date: moment(Released),
+                        length: parseInt(Runtime),
+                        genre_id: null
+                    })
+                }
+                
+            } else {
+                const { title, release_date, awards, image, length } = movie
+                movie = {
+                    Title: title,
+                    Poster: image ? image : "http://localhost:3001/img/logo-DH.png",
+                    Year: moment(release_date).format("YYYY"),
+                    Awards: awards,
+                    Runtime: length
+                }
+            }
+
+            return res.render("moviesDetailOmdb", {
+                movie
+            })
+        } catch (error) {
+            console.log(error)
+        }
     },
     //Aqui dispongo las rutas para trabajar con el CRUD
     add: function (req, res) {
